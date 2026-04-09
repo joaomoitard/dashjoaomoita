@@ -346,6 +346,7 @@
   </div>
   <div class="header-actions">
     <button class="btn btn-outline" onclick="exportarCSV()">↓ Exportar CSV</button>
+    <button class="btn btn-outline" onclick="apagarDados()" style="opacity:.6" title="Apagar todos os dados salvos">🗑 Apagar dados</button>
     <button class="btn btn-primary" onclick="switchTab('nova')">+ Nova demanda</button>
   </div>
 </header>
@@ -533,6 +534,11 @@
             <option value="N/A">N/A</option>
           </select>
         </div>
+        <div class="form-group">
+          <label>Link do comprovante (Google Drive)</label>
+          <input type="text" id="fn-comprovante-link" placeholder="Cole o link de compartilhamento...">
+          <span style="font-size:11px;color:var(--text-faint);margin-top:3px;display:block">No Drive: botão direito → Obter link → Qualquer pessoa com o link</span>
+        </div>
         <div class="form-group" style="grid-column:1/-1">
           <label>Motivo da refação</label>
           <input type="text" id="fn-motivo" placeholder="Descreva o motivo da refação, se houver...">
@@ -566,8 +572,16 @@
 </main>
 
 <script>
-let demandas = [];
+let demandas = JSON.parse(localStorage.getItem('demandas') || '[]');
 let chartInst = {};
+
+function salvarStorage() {
+  try {
+    localStorage.setItem('demandas', JSON.stringify(demandas));
+  } catch(e) {
+    alert('Atenção: o armazenamento local está cheio. Exporte o CSV e apague alguns registros antigos.');
+  }
+}
 
 // ── TABS ──
 function switchTab(t) {
@@ -601,13 +615,15 @@ function salvarDemanda() {
     prazo:       document.getElementById('fn-prazo').value,
     aprov:       document.getElementById('fn-aprov').value,
     refacoes:    parseInt(document.getElementById('fn-refacoes').value) || 0,
-    comprovante: document.getElementById('fn-comprovante').value,
+    comprovante:      document.getElementById('fn-comprovante').value,
+    comprovanteLink:  document.getElementById('fn-comprovante-link').value.trim(),
     motivo:      document.getElementById('fn-motivo').value.trim(),
     assetBool:   document.getElementById('fn-asset-bool').value,
     asset:       document.getElementById('fn-asset').value.trim(),
     entregaFinal:document.getElementById('fn-entrega-final').value.trim()
   };
   demandas.push(d);
+  salvarStorage();
   msg.className = 'form-msg ok';
   msg.textContent = 'Demanda salva com sucesso!';
   setTimeout(() => { limparForm(); switchTab('lista'); }, 800);
@@ -619,6 +635,7 @@ function limparForm() {
   ['fn-prazo','fn-aprov','fn-comprovante','fn-asset-bool']
     .forEach(id => document.getElementById(id).value = '');
   document.getElementById('fn-refacoes').value = '0';
+  document.getElementById('fn-comprovante-link').value = '';
   const msg = document.getElementById('form-msg');
   msg.className = 'form-msg'; msg.textContent = '';
 }
@@ -707,7 +724,7 @@ function renderLista() {
       <td>${badge(d.prazo)}</td>
       <td>${badge(d.aprov)}</td>
       <td style="text-align:center;font-family:'DM Mono',monospace;font-weight:500">${d.refacoes}</td>
-      <td>${badge(d.comprovante)}</td>
+      <td>${badge(d.comprovante)}${d.comprovanteLink ? `<a href="${d.comprovanteLink}" target="_blank" style="margin-left:6px;background:var(--accent-dim);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:600;color:var(--primary);text-decoration:none;white-space:nowrap">Ver ↗</a>` : ''}</td>
       <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted)" title="${d.motivo}">${d.motivo || '—'}</td>
       <td>${badge(d.assetBool)}</td>
       <td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${d.asset}">${d.asset || '—'}</td>
@@ -837,7 +854,7 @@ function exportarCSV() {
   const header = [
     'Nome da Demanda','Link Jira','Owner','Área Solicitante',
     'Data Início','Data Entrega','Dias','Prazo Cumprido',
-    'Aprovação de Primeira','Qtd. Refações','Comprovante',
+    'Aprovação de Primeira','Qtd. Refações','Comprovante','Link Comprovante',
     'Motivo Refação','Assets Reutilizados?','Asset Reutilizado','Entrega Final'
   ];
   const rows = demandas.map(d => [
@@ -849,6 +866,7 @@ function exportarCSV() {
     fmtDate(d.entrega),
     diasEntre(d.inicio, d.entrega) !== null ? diasEntre(d.inicio, d.entrega) : '',
     d.prazo, d.aprov, d.refacoes, d.comprovante,
+    `"${d.comprovanteLink || ''}"`,
     `"${d.motivo}"`,
     d.assetBool,
     `"${d.asset}"`,
@@ -862,6 +880,14 @@ function exportarCSV() {
   link.download = `demandas_${new Date().toISOString().slice(0,10)}.csv`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function apagarDados() {
+  if (!confirm('Apagar TODAS as demandas salvas?\nEsta ação não pode ser desfeita.\n\nRecomendamos exportar o CSV antes.')) return;
+  demandas = [];
+  localStorage.removeItem('demandas');
+  renderLista();
+  updateDashboard();
 }
 
 updateDashboard();

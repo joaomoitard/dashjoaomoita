@@ -461,6 +461,7 @@
               <th>Asset reut.?</th>
               <th>Asset</th>
               <th>Entrega final</th>
+              <th></th>
             </tr>
           </thead>
           <tbody id="tabela-body"></tbody>
@@ -729,8 +730,11 @@ function renderLista() {
       <td>${badge(d.assetBool)}</td>
       <td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${d.asset}">${d.asset || '—'}</td>
       <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${d.entregaFinal}">${d.entregaFinal || '—'}</td>
+      <td style="white-space:nowrap">
+        <button onclick="editarDemanda(${d.id})" style="background:var(--accent-dim);border:none;border-radius:4px;padding:3px 9px;font-size:11px;font-weight:600;color:var(--primary);cursor:pointer;margin-right:4px">✏ Editar</button>
+        <button onclick="apagarDemanda(${d.id})" style="background:var(--danger-bg);border:none;border-radius:4px;padding:3px 9px;font-size:11px;font-weight:600;color:var(--danger);cursor:pointer">✕ Apagar</button>
+      </td>
     </tr>`;
-  }).join('');
 }
 
 // ── DASHBOARD ──
@@ -890,7 +894,178 @@ function apagarDados() {
   updateDashboard();
 }
 
+// ── EDITAR / APAGAR ──
+function apagarDemanda(id) {
+  if (!confirm('Apagar esta demanda? A ação não pode ser desfeita.')) return;
+  demandas = demandas.filter(d => d.id !== id);
+  salvarStorage();
+  renderLista();
+  updateDashboard();
+}
+
+function editarDemanda(id) {
+  const d = demandas.find(x => x.id === id);
+  if (!d) return;
+  const m = document.getElementById('modal-edicao');
+  document.getElementById('ed-id').value      = d.id;
+  document.getElementById('ed-nome').value    = d.nome || '';
+  document.getElementById('ed-jira').value    = d.jira || '';
+  document.getElementById('ed-owner').value   = d.owner || '';
+  document.getElementById('ed-area').value    = d.area || '';
+  document.getElementById('ed-inicio').value  = d.inicio || '';
+  document.getElementById('ed-entrega').value = d.entrega || '';
+  document.getElementById('ed-prazo').value   = d.prazo || '';
+  document.getElementById('ed-aprov').value   = d.aprov || '';
+  document.getElementById('ed-refacoes').value= d.refacoes || 0;
+  document.getElementById('ed-comprovante').value     = d.comprovante || '';
+  document.getElementById('ed-comprovante-link').value= d.comprovanteLink || '';
+  document.getElementById('ed-motivo').value  = d.motivo || '';
+  document.getElementById('ed-asset-bool').value = d.assetBool || '';
+  document.getElementById('ed-asset').value   = d.asset || '';
+  document.getElementById('ed-entrega-final').value = d.entregaFinal || '';
+  document.getElementById('ed-msg').className = 'form-msg';
+  document.getElementById('ed-msg').textContent = '';
+  m.style.display = 'flex';
+}
+
+function fecharModal() {
+  document.getElementById('modal-edicao').style.display = 'none';
+}
+
+function salvarEdicao() {
+  const id   = parseInt(document.getElementById('ed-id').value);
+  const nome = document.getElementById('ed-nome').value.trim();
+  const msg  = document.getElementById('ed-msg');
+  if (!nome) {
+    msg.className = 'form-msg err';
+    msg.textContent = 'O nome da demanda é obrigatório.';
+    return;
+  }
+  const idx = demandas.findIndex(x => x.id === id);
+  if (idx === -1) return;
+  demandas[idx] = {
+    ...demandas[idx],
+    nome,
+    jira:             document.getElementById('ed-jira').value.trim(),
+    owner:            document.getElementById('ed-owner').value.trim(),
+    area:             document.getElementById('ed-area').value.trim(),
+    inicio:           document.getElementById('ed-inicio').value,
+    entrega:          document.getElementById('ed-entrega').value,
+    prazo:            document.getElementById('ed-prazo').value,
+    aprov:            document.getElementById('ed-aprov').value,
+    refacoes:         parseInt(document.getElementById('ed-refacoes').value) || 0,
+    comprovante:      document.getElementById('ed-comprovante').value,
+    comprovanteLink:  document.getElementById('ed-comprovante-link').value.trim(),
+    motivo:           document.getElementById('ed-motivo').value.trim(),
+    assetBool:        document.getElementById('ed-asset-bool').value,
+    asset:            document.getElementById('ed-asset').value.trim(),
+    entregaFinal:     document.getElementById('ed-entrega-final').value.trim(),
+  };
+  salvarStorage();
+  fecharModal();
+  renderLista();
+  updateDashboard();
+}
+
 updateDashboard();
 </script>
+<!-- MODAL EDIÇÃO -->
+<div id="modal-edicao" onclick="if(event.target===this)fecharModal()" style="display:none;position:fixed;inset:0;background:rgba(0,34,51,0.5);z-index:999;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:var(--bg);border-radius:var(--radius-lg);padding:1.5rem;width:100%;max-width:680px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,34,51,0.2)">
+    <input type="hidden" id="ed-id">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+      <div style="font-size:15px;font-weight:500;color:var(--text)">Editar demanda</div>
+      <button onclick="fecharModal()" style="background:none;border:none;font-size:20px;color:var(--text-faint);cursor:pointer;line-height:1">✕</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group" style="grid-column:1/-1">
+        <label>Nome da demanda *</label>
+        <input type="text" id="ed-nome">
+      </div>
+      <div class="form-group">
+        <label>Link do card no Jira</label>
+        <input type="text" id="ed-jira">
+      </div>
+      <div class="form-group">
+        <label>Owner</label>
+        <input type="text" id="ed-owner">
+      </div>
+      <div class="form-group">
+        <label>Área solicitante</label>
+        <input type="text" id="ed-area">
+      </div>
+      <div class="form-group">
+        <label>Data de início</label>
+        <input type="date" id="ed-inicio">
+      </div>
+      <div class="form-group">
+        <label>Data de entrega</label>
+        <input type="date" id="ed-entrega">
+      </div>
+      <div class="form-group">
+        <label>Prazo cumprido?</label>
+        <select id="ed-prazo">
+          <option value="">Selecione...</option>
+          <option value="Sim">Sim</option>
+          <option value="Não">Não</option>
+          <option value="N/A">N/A</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Aprovação de primeira?</label>
+        <select id="ed-aprov">
+          <option value="">Selecione...</option>
+          <option value="Sim">Sim</option>
+          <option value="Não">Não</option>
+          <option value="N/A">N/A</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Quantidade de refações</label>
+        <input type="number" id="ed-refacoes" min="0">
+      </div>
+      <div class="form-group">
+        <label>Comprovante</label>
+        <select id="ed-comprovante">
+          <option value="">Selecione...</option>
+          <option value="Sim">Sim</option>
+          <option value="Não">Não</option>
+          <option value="N/A">N/A</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>Link do comprovante (Google Drive)</label>
+        <input type="text" id="ed-comprovante-link" placeholder="Cole o link de compartilhamento...">
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>Motivo da refação</label>
+        <input type="text" id="ed-motivo">
+      </div>
+      <div class="form-group">
+        <label>Assets reutilizados?</label>
+        <select id="ed-asset-bool">
+          <option value="">Selecione...</option>
+          <option value="Sim">Sim</option>
+          <option value="Não">Não</option>
+          <option value="N/A">N/A</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Asset reutilizado (qual?)</label>
+        <input type="text" id="ed-asset">
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>Entrega final</label>
+        <input type="text" id="ed-entrega-final">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:1.25rem">
+      <button class="btn btn-primary" onclick="salvarEdicao()">Salvar alterações</button>
+      <button class="btn btn-ghost" onclick="fecharModal()">Cancelar</button>
+    </div>
+    <div id="ed-msg" class="form-msg"></div>
+  </div>
+</div>
+
 </body>
 </html>

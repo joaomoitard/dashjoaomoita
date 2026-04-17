@@ -346,6 +346,10 @@
   </div>
   <div class="header-actions">
     <button class="btn btn-outline" onclick="exportarCSV()">↓ Exportar CSV</button>
+    <label class="btn btn-outline" style="cursor:pointer" title="Importar demandas de um arquivo CSV">
+      ↑ Importar CSV
+      <input type="file" accept=".csv" style="display:none" onchange="importarCSV(this)">
+    </label>
     <button class="btn btn-outline" onclick="apagarDados()" style="opacity:.6" title="Apagar todos os dados salvos">🗑 Apagar dados</button>
     <button class="btn btn-primary" onclick="switchTab('nova')">+ Nova demanda</button>
   </div>
@@ -402,8 +406,9 @@
 
     <div class="charts-grid">
       <div class="card">
-        <div class="card-title">Assets reutilizados</div>
-        <div style="position:relative;height:160px"><canvas id="cAssets" role="img" aria-label="Assets reutilizados"></canvas></div>
+        <div class="card-title">Refações por área solicitante</div>
+        <div style="position:relative;height:160px"><canvas id="cRefArea" role="img" aria-label="Refações por área"></canvas></div>
+        <div id="cRefArea-empty" class="empty" style="display:none;padding:16px"><p>Nenhuma refação registrada.</p></div>
       </div>
       <div class="card">
         <div class="card-title">Tempo médio de entrega por área (dias)</div>
@@ -571,6 +576,105 @@
   </div>
 
 </main>
+
+<!-- MODAL EDIÇÃO -->
+<div id="modal-edicao" onclick="if(event.target===this)fecharModal()" style="display:none;position:fixed;inset:0;background:rgba(0,34,51,0.5);z-index:999;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:var(--bg);border-radius:var(--radius-lg);padding:1.5rem;width:100%;max-width:680px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,34,51,0.2)">
+    <input type="hidden" id="ed-id">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+      <div style="font-size:15px;font-weight:500;color:var(--text)">Editar demanda</div>
+      <button onclick="fecharModal()" style="background:none;border:none;font-size:20px;color:var(--text-faint);cursor:pointer;line-height:1">✕</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group" style="grid-column:1/-1">
+        <label>Nome da demanda *</label>
+        <input type="text" id="ed-nome">
+      </div>
+      <div class="form-group">
+        <label>Link do card no Jira</label>
+        <input type="text" id="ed-jira">
+      </div>
+      <div class="form-group">
+        <label>Owner</label>
+        <input type="text" id="ed-owner">
+      </div>
+      <div class="form-group">
+        <label>Área solicitante</label>
+        <input type="text" id="ed-area">
+      </div>
+      <div class="form-group">
+        <label>Data de início</label>
+        <input type="date" id="ed-inicio">
+      </div>
+      <div class="form-group">
+        <label>Data de entrega</label>
+        <input type="date" id="ed-entrega">
+      </div>
+      <div class="form-group">
+        <label>Prazo cumprido?</label>
+        <select id="ed-prazo">
+          <option value="">Selecione...</option>
+          <option value="Sim">Sim</option>
+          <option value="Não">Não</option>
+          <option value="N/A">N/A</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Aprovação de primeira?</label>
+        <select id="ed-aprov">
+          <option value="">Selecione...</option>
+          <option value="Sim">Sim</option>
+          <option value="Não">Não</option>
+          <option value="N/A">N/A</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Quantidade de refações</label>
+        <input type="number" id="ed-refacoes" min="0">
+      </div>
+      <div class="form-group">
+        <label>Comprovante</label>
+        <select id="ed-comprovante">
+          <option value="">Selecione...</option>
+          <option value="Sim">Sim</option>
+          <option value="Não">Não</option>
+          <option value="N/A">N/A</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>Link do comprovante (Google Drive)</label>
+        <input type="text" id="ed-comprovante-link" placeholder="Cole o link de compartilhamento...">
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>Motivo da refação</label>
+        <input type="text" id="ed-motivo">
+      </div>
+      <div class="form-group">
+        <label>Assets reutilizados?</label>
+        <select id="ed-asset-bool">
+          <option value="">Selecione...</option>
+          <option value="Sim">Sim</option>
+          <option value="Não">Não</option>
+          <option value="N/A">N/A</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Asset reutilizado (qual?)</label>
+        <input type="text" id="ed-asset">
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>Entrega final</label>
+        <input type="text" id="ed-entrega-final">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:1.25rem">
+      <button class="btn btn-primary" onclick="salvarEdicao()">Salvar alterações</button>
+      <button class="btn btn-ghost" onclick="fecharModal()">Cancelar</button>
+    </div>
+    <div id="ed-msg" class="form-msg"></div>
+  </div>
+</div>
+
 
 <script>
 let demandas = JSON.parse(localStorage.getItem('demandas') || '[]');
@@ -772,18 +876,20 @@ function updateDashboard() {
   // Contadores
   const cntPrazo = { Sim:0, Não:0, 'N/A':0 };
   const cntAprov = { Sim:0, Não:0, 'N/A':0 };
-  const cntAsset = { Sim:0, Não:0, 'N/A':0 };
   const areaMap  = {};
   const tempoArea= {};
+  const refAreaMap = {};
 
   demandas.forEach(d => {
     if (d.prazo) cntPrazo[d.prazo] = (cntPrazo[d.prazo]||0) + 1;
     if (d.aprov) cntAprov[d.aprov] = (cntAprov[d.aprov]||0) + 1;
-    if (d.assetBool) cntAsset[d.assetBool] = (cntAsset[d.assetBool]||0) + 1;
     if (d.area) areaMap[d.area] = (areaMap[d.area]||0) + 1;
     if (d.area && d.inicio && d.entrega) {
       if (!tempoArea[d.area]) tempoArea[d.area] = [];
       tempoArea[d.area].push(diasEntre(d.inicio, d.entrega));
+    }
+    if (d.area && d.refacoes > 0) {
+      refAreaMap[d.area] = (refAreaMap[d.area]||0) + d.refacoes;
     }
   });
 
@@ -805,10 +911,21 @@ function updateDashboard() {
     {scales:{y:{beginAtZero:true,ticks:{precision:0,color:'#8aa0ae'},grid:{color:'#eef1f3'}},x:{ticks:{font:{size:10},color:'#8aa0ae'},grid:{display:false}}}}
   );
 
-  mkChart('cAssets','bar',['Reutilizados','Não reut.','N/A'],
-    [{data:[cntAsset.Sim,cntAsset.Não,cntAsset['N/A']],backgroundColor:['#002233','#aabbcc','#dde2e6'],borderRadius:4}],
-    {indexAxis:'y',scales:{x:{beginAtZero:true,ticks:{precision:0,color:'#8aa0ae'},grid:{color:'#eef1f3'}},y:{ticks:{color:'#8aa0ae'},grid:{display:false}}}}
-  );
+  const refAreaLabels = Object.keys(refAreaMap).sort((a,b) => refAreaMap[b] - refAreaMap[a]);
+  const refAreaCanvas = document.getElementById('cRefArea');
+  const refAreaEmpty  = document.getElementById('cRefArea-empty');
+  if (refAreaLabels.length === 0) {
+    if (refAreaCanvas) refAreaCanvas.style.display = 'none';
+    if (refAreaEmpty)  refAreaEmpty.style.display = 'block';
+  } else {
+    if (refAreaCanvas) refAreaCanvas.style.display = 'block';
+    if (refAreaEmpty)  refAreaEmpty.style.display = 'none';
+    const refAreaColors = ['#c0392b','#BA7517','#002233','#4a6070','#0d7a4e','#8aa0ae'];
+    mkChart('cRefArea','bar', refAreaLabels,
+      [{data:refAreaLabels.map(a=>refAreaMap[a]),backgroundColor:refAreaColors.slice(0,refAreaLabels.length),borderRadius:4}],
+      {indexAxis:'y',scales:{x:{beginAtZero:true,ticks:{precision:0,color:'#8aa0ae'},grid:{color:'#eef1f3'}},y:{ticks:{font:{size:11},color:'#4a6070'},grid:{display:false}}},plugins:{legend:{display:false}}}
+    );
+  }
 
   // Tempo médio por área
   const tempoWrap  = document.getElementById('tempo-medio-wrap');
@@ -885,6 +1002,116 @@ function exportarCSV() {
   link.download = `demandas_${new Date().toISOString().slice(0,10)}.csv`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+// ── IMPORTAR CSV ──
+function importarCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = e.target.result.replace(/^\uFEFF/, ''); // remove BOM
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) {
+      alert('CSV vazio ou sem dados.');
+      input.value = '';
+      return;
+    }
+
+    // Detecta separador (vírgula ou ponto-e-vírgula)
+    const sep = lines[0].includes(';') ? ';' : ',';
+
+    // Mapeia cabeçalho
+    const headers = parseCSVLine(lines[0], sep).map(h => h.trim().toLowerCase());
+    const colIdx = name => headers.findIndex(h => h.includes(name));
+
+    const iNome     = colIdx('nome');
+    const iJira     = colIdx('jira');
+    const iOwner    = colIdx('owner');
+    const iArea     = colIdx('área') !== -1 ? colIdx('área') : colIdx('area');
+    const iInicio   = colIdx('início') !== -1 ? colIdx('início') : colIdx('inicio');
+    const iEntrega  = colIdx('entrega');
+    const iPrazo    = colIdx('prazo');
+    const iAprov    = colIdx('aprovação') !== -1 ? colIdx('aprovação') : colIdx('aprovacao');
+    const iRefacoes = colIdx('refaç') !== -1 ? colIdx('refaç') : colIdx('refac');
+    const iComp     = colIdx('comprovante');
+    const iCompLink = colIdx('link comp');
+    const iMotivo   = colIdx('motivo');
+    const iAsset    = colIdx('asset reut');
+    const iAssetNm  = colIdx('asset reutilizado');
+    const iEntFinal = colIdx('entrega final');
+
+    if (iNome === -1) {
+      alert('Coluna "Nome da Demanda" não encontrada. Verifique se o CSV foi exportado por este painel.');
+      input.value = '';
+      return;
+    }
+
+    let importadas = 0;
+    let ignoradas  = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseCSVLine(lines[i], sep);
+      const nome = (cols[iNome] || '').trim();
+      if (!nome) { ignoradas++; continue; }
+
+      // Evita duplicatas pelo nome exato
+      if (demandas.find(d => d.nome === nome)) { ignoradas++; continue; }
+
+      // Converte data dd/mm/yyyy → yyyy-mm-dd
+      const parseData = v => {
+        if (!v) return '';
+        const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        return m ? `${m[3]}-${m[2]}-${m[1]}` : v;
+      };
+
+      demandas.push({
+        id:              Date.now() + i,
+        nome,
+        jira:            iJira     !== -1 ? (cols[iJira]     || '').trim() : '',
+        owner:           iOwner    !== -1 ? (cols[iOwner]    || '').trim() : '',
+        area:            iArea     !== -1 ? (cols[iArea]     || '').trim() : '',
+        inicio:          iInicio   !== -1 ? parseData(cols[iInicio])       : '',
+        entrega:         iEntrega  !== -1 ? parseData(cols[iEntrega])      : '',
+        prazo:           iPrazo    !== -1 ? (cols[iPrazo]    || '').trim() : '',
+        aprov:           iAprov    !== -1 ? (cols[iAprov]    || '').trim() : '',
+        refacoes:        iRefacoes !== -1 ? parseInt(cols[iRefacoes]) || 0  : 0,
+        comprovante:     iComp     !== -1 ? (cols[iComp]     || '').trim() : '',
+        comprovanteLink: iCompLink !== -1 ? (cols[iCompLink] || '').trim() : '',
+        motivo:          iMotivo   !== -1 ? (cols[iMotivo]   || '').trim() : '',
+        assetBool:       iAsset    !== -1 ? (cols[iAsset]    || '').trim() : '',
+        asset:           iAssetNm  !== -1 ? (cols[iAssetNm]  || '').trim() : '',
+        entregaFinal:    iEntFinal !== -1 ? (cols[iEntFinal] || '').trim() : '',
+      });
+      importadas++;
+    }
+
+    salvarStorage();
+    renderLista();
+    updateDashboard();
+    input.value = '';
+    alert(`Importação concluída!\n✔ ${importadas} demanda(s) importada(s)\n${ignoradas > 0 ? `⚠ ${ignoradas} ignorada(s) (sem nome ou já existentes)` : ''}`);
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function parseCSVLine(line, sep) {
+  const result = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i+1] === '"') { cur += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (ch === sep && !inQuotes) {
+      result.push(cur); cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
 }
 
 function apagarDados() {
@@ -970,103 +1197,6 @@ function salvarEdicao() {
 
 updateDashboard();
 </script>
-<!-- MODAL EDIÇÃO -->
-<div id="modal-edicao" onclick="if(event.target===this)fecharModal()" style="display:none;position:fixed;inset:0;background:rgba(0,34,51,0.5);z-index:999;align-items:center;justify-content:center;padding:1rem">
-  <div style="background:var(--bg);border-radius:var(--radius-lg);padding:1.5rem;width:100%;max-width:680px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,34,51,0.2)">
-    <input type="hidden" id="ed-id">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
-      <div style="font-size:15px;font-weight:500;color:var(--text)">Editar demanda</div>
-      <button onclick="fecharModal()" style="background:none;border:none;font-size:20px;color:var(--text-faint);cursor:pointer;line-height:1">✕</button>
-    </div>
-    <div class="form-grid">
-      <div class="form-group" style="grid-column:1/-1">
-        <label>Nome da demanda *</label>
-        <input type="text" id="ed-nome">
-      </div>
-      <div class="form-group">
-        <label>Link do card no Jira</label>
-        <input type="text" id="ed-jira">
-      </div>
-      <div class="form-group">
-        <label>Owner</label>
-        <input type="text" id="ed-owner">
-      </div>
-      <div class="form-group">
-        <label>Área solicitante</label>
-        <input type="text" id="ed-area">
-      </div>
-      <div class="form-group">
-        <label>Data de início</label>
-        <input type="date" id="ed-inicio">
-      </div>
-      <div class="form-group">
-        <label>Data de entrega</label>
-        <input type="date" id="ed-entrega">
-      </div>
-      <div class="form-group">
-        <label>Prazo cumprido?</label>
-        <select id="ed-prazo">
-          <option value="">Selecione...</option>
-          <option value="Sim">Sim</option>
-          <option value="Não">Não</option>
-          <option value="N/A">N/A</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Aprovação de primeira?</label>
-        <select id="ed-aprov">
-          <option value="">Selecione...</option>
-          <option value="Sim">Sim</option>
-          <option value="Não">Não</option>
-          <option value="N/A">N/A</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Quantidade de refações</label>
-        <input type="number" id="ed-refacoes" min="0">
-      </div>
-      <div class="form-group">
-        <label>Comprovante</label>
-        <select id="ed-comprovante">
-          <option value="">Selecione...</option>
-          <option value="Sim">Sim</option>
-          <option value="Não">Não</option>
-          <option value="N/A">N/A</option>
-        </select>
-      </div>
-      <div class="form-group" style="grid-column:1/-1">
-        <label>Link do comprovante (Google Drive)</label>
-        <input type="text" id="ed-comprovante-link" placeholder="Cole o link de compartilhamento...">
-      </div>
-      <div class="form-group" style="grid-column:1/-1">
-        <label>Motivo da refação</label>
-        <input type="text" id="ed-motivo">
-      </div>
-      <div class="form-group">
-        <label>Assets reutilizados?</label>
-        <select id="ed-asset-bool">
-          <option value="">Selecione...</option>
-          <option value="Sim">Sim</option>
-          <option value="Não">Não</option>
-          <option value="N/A">N/A</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Asset reutilizado (qual?)</label>
-        <input type="text" id="ed-asset">
-      </div>
-      <div class="form-group" style="grid-column:1/-1">
-        <label>Entrega final</label>
-        <input type="text" id="ed-entrega-final">
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:1.25rem">
-      <button class="btn btn-primary" onclick="salvarEdicao()">Salvar alterações</button>
-      <button class="btn btn-ghost" onclick="fecharModal()">Cancelar</button>
-    </div>
-    <div id="ed-msg" class="form-msg"></div>
-  </div>
-</div>
 
 </body>
 </html>

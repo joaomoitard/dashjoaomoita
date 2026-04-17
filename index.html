@@ -547,7 +547,15 @@
         </div>
         <div class="form-group" style="grid-column:1/-1">
           <label>Motivo da refação</label>
-          <input type="text" id="fn-motivo" placeholder="Descreva o motivo da refação, se houver...">
+          <select id="fn-motivo">
+            <option value="">Selecione (se houver refação)...</option>
+            <option value="Briefing incompleto">Briefing incompleto</option>
+            <option value="Mudança de escopo após início">Mudança de escopo após início</option>
+            <option value="Ajuste estético / preferência pessoal">Ajuste estético / preferência pessoal</option>
+            <option value="Erro de execução (lado criativo)">Erro de execução (lado criativo)</option>
+            <option value="Aprovação por terceiro não previsto">Aprovação por terceiro não previsto</option>
+            <option value="Prazo insuficiente">Prazo insuficiente</option>
+          </select>
         </div>
         <div class="form-group">
           <label>Assets reutilizados?</label>
@@ -647,7 +655,15 @@
       </div>
       <div class="form-group" style="grid-column:1/-1">
         <label>Motivo da refação</label>
-        <input type="text" id="ed-motivo">
+        <select id="ed-motivo">
+          <option value="">Selecione (se houver refação)...</option>
+          <option value="Briefing incompleto">Briefing incompleto</option>
+          <option value="Mudança de escopo após início">Mudança de escopo após início</option>
+          <option value="Ajuste estético / preferência pessoal">Ajuste estético / preferência pessoal</option>
+          <option value="Erro de execução (lado criativo)">Erro de execução (lado criativo)</option>
+          <option value="Aprovação por terceiro não previsto">Aprovação por terceiro não previsto</option>
+          <option value="Prazo insuficiente">Prazo insuficiente</option>
+        </select>
       </div>
       <div class="form-group">
         <label>Assets reutilizados?</label>
@@ -735,9 +751,9 @@ function salvarDemanda() {
 }
 
 function limparForm() {
-  ['fn-nome','fn-jira','fn-owner','fn-area','fn-inicio','fn-entrega','fn-motivo','fn-asset','fn-entrega-final']
+  ['fn-nome','fn-jira','fn-owner','fn-area','fn-inicio','fn-entrega','fn-asset','fn-entrega-final']
     .forEach(id => document.getElementById(id).value = '');
-  ['fn-prazo','fn-aprov','fn-comprovante','fn-asset-bool']
+  ['fn-prazo','fn-aprov','fn-comprovante','fn-asset-bool','fn-motivo']
     .forEach(id => document.getElementById(id).value = '');
   document.getElementById('fn-refacoes').value = '0';
   document.getElementById('fn-comprovante-link').value = '';
@@ -948,25 +964,66 @@ function updateDashboard() {
   // Motivos de refação
   const motivosWrap  = document.getElementById('motivos-wrap');
   const motivosEmpty = document.getElementById('motivos-empty');
-  const motivosMap   = {};
+
+  const CATEGORIAS = [
+    'Briefing incompleto',
+    'Mudança de escopo após início',
+    'Ajuste estético / preferência pessoal',
+    'Erro de execução (lado criativo)',
+    'Aprovação por terceiro não previsto',
+    'Prazo insuficiente',
+  ];
+
+  const motivosMap = {};
+  const legados    = {};
   demandas.forEach(d => {
-    if (d.motivo) {
-      const m = d.motivo.trim();
-      if (m) motivosMap[m] = (motivosMap[m]||0) + 1;
+    if (!d.motivo) return;
+    const m = d.motivo.trim();
+    if (!m) return;
+    if (CATEGORIAS.includes(m)) {
+      motivosMap[m] = (motivosMap[m] || 0) + 1;
+    } else {
+      legados[m] = (legados[m] || 0) + 1;
     }
   });
-  const motivosSorted = Object.entries(motivosMap).sort((a,b)=>b[1]-a[1]);
-  if (motivosSorted.length === 0) {
+
+  const totalMotivos = Object.values(motivosMap).reduce((s,v) => s+v, 0)
+                     + Object.values(legados).reduce((s,v) => s+v, 0);
+
+  if (totalMotivos === 0) {
     motivosWrap.innerHTML = ''; motivosEmpty.style.display = 'block';
   } else {
     motivosEmpty.style.display = 'none';
-    const maxM = motivosSorted[0][1];
-    motivosWrap.innerHTML = motivosSorted.slice(0,10).map(([mot,cnt]) => `
-      <div class="motivo-row">
-        <div class="motivo-label" title="${mot}">${mot}</div>
-        <div class="motivo-bar-wrap"><div class="motivo-bar" style="width:${Math.round(cnt/maxM*100)}%"></div></div>
+    const maxM = Math.max(...CATEGORIAS.map(c => motivosMap[c] || 0), ...Object.values(legados), 1);
+
+    // Categorias fixas ordenadas por contagem
+    const catOrdenadas = [...CATEGORIAS].sort((a,b) => (motivosMap[b]||0) - (motivosMap[a]||0));
+
+    let html = catOrdenadas.map(cat => {
+      const cnt = motivosMap[cat] || 0;
+      const pct = Math.round(cnt / maxM * 100);
+      return `<div class="motivo-row" style="${cnt === 0 ? 'opacity:.4' : ''}">
+        <div class="motivo-label" title="${cat}">${cat}</div>
+        <div class="motivo-bar-wrap"><div class="motivo-bar" style="width:${pct}%;background:${cnt === 0 ? 'var(--border)' : 'var(--accent)'}"></div></div>
         <div class="motivo-count">${cnt}</div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
+
+    // Valores legados (texto livre antigo) ao final, em destaque diferente
+    const legadosSorted = Object.entries(legados).sort((a,b) => b[1]-a[1]);
+    if (legadosSorted.length > 0) {
+      html += `<div style="font-size:11px;color:var(--text-faint);margin:10px 0 6px;padding-top:10px;border-top:1px solid var(--border-light)">Registros anteriores à categorização:</div>`;
+      html += legadosSorted.map(([mot, cnt]) => {
+        const pct = Math.round(cnt / maxM * 100);
+        return `<div class="motivo-row" style="opacity:.6">
+          <div class="motivo-label" title="${mot}" style="font-style:italic">${mot}</div>
+          <div class="motivo-bar-wrap"><div class="motivo-bar" style="width:${pct}%;background:#aabbcc"></div></div>
+          <div class="motivo-count">${cnt}</div>
+        </div>`;
+      }).join('');
+    }
+
+    motivosWrap.innerHTML = html;
   }
 }
 
@@ -1148,6 +1205,19 @@ function editarDemanda(id) {
   document.getElementById('ed-comprovante').value     = d.comprovante || '';
   document.getElementById('ed-comprovante-link').value= d.comprovanteLink || '';
   document.getElementById('ed-motivo').value  = d.motivo || '';
+  // Se o valor salvo não existir nas opções (texto livre legado), adiciona como opção temporária
+  const edMotivo = document.getElementById('ed-motivo');
+  const opcoes = [...edMotivo.options].map(o => o.value);
+  if (d.motivo && !opcoes.includes(d.motivo)) {
+    const opt = document.createElement('option');
+    opt.value = d.motivo;
+    opt.textContent = `⚠ Valor anterior: "${d.motivo}"`;
+    opt.dataset.legado = '1';
+    edMotivo.appendChild(opt);
+  }
+  // Remove opções legadas antigas antes de adicionar nova
+  [...edMotivo.options].forEach(o => { if (o.dataset.legado && o.value !== d.motivo) o.remove(); });
+  edMotivo.value = d.motivo || '';
   document.getElementById('ed-asset-bool').value = d.assetBool || '';
   document.getElementById('ed-asset').value   = d.asset || '';
   document.getElementById('ed-entrega-final').value = d.entregaFinal || '';
